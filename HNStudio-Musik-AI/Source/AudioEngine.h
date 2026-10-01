@@ -20,7 +20,7 @@ public:
     bool initAudioDevice();
     void closeAudioDevice();
 
-    // AudioIODeviceCallback
+    // Primary AudioIODeviceCallback (Mic Input + Monitor Output)
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
@@ -31,24 +31,57 @@ public:
                                          const juce::AudioIODeviceCallbackContext& context) override;
     void audioDeviceError(const juce::String& errorMessage) override;
 
+    // Secondary System Audio Callback (CABLE Output Input)
+    class SystemAudioCallback : public juce::AudioIODeviceCallback
+    {
+    public:
+        SystemAudioCallback(AudioEngine& ownerEngine);
+        void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
+        void audioDeviceStopped() override;
+        void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
+                                             int numInputChannels,
+                                             float* const* outputChannelData,
+                                             int numOutputChannels,
+                                             int numSamples,
+                                             const juce::AudioIODeviceCallbackContext& context) override;
+        void audioDeviceError(const juce::String& errorMessage) override;
+    private:
+        AudioEngine& engine;
+    };
+
+    SystemAudioCallback systemAudioCallback;
+
     // ChangeListener (device changes)
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     // Components
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
+    juce::AudioDeviceManager& getSystemDeviceManager() { return systemDeviceManager; }
     DspChain& getDspChain() { return dspChain; }
+    DspChain& getSystemDspChain() { return systemDspChain; }
     VstRack& getVstRack() { return vstRack; }
+    VstRack& getSystemVstRack() { return systemVstRack; }
     AutoKeyDetector& getAutoKeyDetector() { return autoKeyDetector; }
     MusicPlayer& getMusicPlayer() { return musicPlayer; }
     SfxPlayer& getSfxPlayer() { return sfxPlayer; }
     AudioRecorder& getAudioRecorder() { return audioRecorder; }
 
-    // Volumes & Controls
-    void setLiveEnabled(bool enabled) { isLiveOn.store(enabled); }
+    // Live Routing & Virtual Driver Controls
+    void setLiveEnabled(bool enabled);
     bool isLiveEnabled() const { return isLiveOn.load(); }
 
+    void setMonitorEnabled(bool enabled) { isMonitorOn.store(enabled); }
+    bool isMonitorEnabled() const { return isMonitorOn.load(); }
+
+    bool isVirtualDriverInstalled() const;
+    bool installVirtualDriver();
+
+    // Volumes & Controls
     void setMicVolume(float vol) { micVolume.store(juce::jlimit(0.0f, 2.0f, vol)); }
     float getMicVolume() const { return micVolume.load(); }
+
+    void setSystemVolume(float vol) { systemVolume.store(juce::jlimit(0.0f, 2.0f, vol)); }
+    float getSystemVolume() const { return systemVolume.load(); }
 
     void setMusicVolume(float vol)
     {
@@ -63,6 +96,8 @@ public:
     // Metering
     float getMicLevelPeak() const { return micLevelPeak.load(); }
     float getMicLevelRms() const { return micLevelRms.load(); }
+    float getSystemLevelPeak() const { return systemLevelPeak.load(); }
+    float getSystemLevelRms() const { return systemLevelRms.load(); }
     float getOutputLevelPeak() const { return outputLevelPeak.load(); }
     float getOutputLevelRms() const { return outputLevelRms.load(); }
     bool getAndResetClip() { return isClipping.exchange(false); }
@@ -70,6 +105,7 @@ public:
     // Realtime Waveform extraction
     static constexpr int WaveformBufferSize = 512;
     void getMicWaveform(std::array<float, WaveformBufferSize>& dest);
+    void getSystemWaveform(std::array<float, WaveformBufferSize>& dest);
     void getOutputWaveform(std::array<float, WaveformBufferSize>& dest);
 
     // Error & device disconnect notifications
@@ -77,41 +113,61 @@ public:
     bool hasDeviceError() const { return lastDeviceError.isNotEmpty(); }
     void clearDeviceError() { lastDeviceError = ""; }
 
+    // Internal system audio block processor called from SystemAudioCallback
+    void processSystemAudioBlock(const float* const* inputChannelData, int numInputChannels, int numSamples);
+
 private:
-    juce::AudioDeviceManager deviceManager;
-    DspChain dspChain;
-    VstRack vstRack;
+    void saveAndRedirectWindowsDefaultAudio(bool liveOn);
+
+    juce::AudioDeviceManager deviceManager;       // Primary: Mic Input + Monitor Output
+    juce::AudioDeviceManager systemDeviceManager; // Secondary: CABLE Output Input (System Audio)
+
+    DspChain dspChain;          // Mic FX chain
+    DspChain systemDspChain;    // System Audio FX chain
+    VstRack vstRack;            // Mic VST3 rack
+    VstRack systemVstRack;      // System VST3 rack
     AutoKeyDetector autoKeyDetector;
     MusicPlayer musicPlayer;
     SfxPlayer sfxPlayer;
     AudioRecorder audioRecorder;
 
-    std::atomic<bool> isLiveOn { true };
+    std::atomic<bool> isLiveOn { false };
+    std::atomic<bool> isMonitorOn { true };
     std::atomic<float> micVolume { 1.0f };
+    std::atomic<float> systemVolume { 1.0f };
     std::atomic<float> musicVolume { 0.85f };
     std::atomic<float> masterVolume { 1.0f };
 
     std::atomic<float> micLevelPeak { 0.0f };
     std::atomic<float> micLevelRms { 0.0f };
+    std::atomic<float> systemLevelPeak { 0.0f };
+    std::atomic<float> systemLevelRms { 0.0f };
     std::atomic<float> outputLevelPeak { 0.0f };
     std::atomic<float> outputLevelRms { 0.0f };
     std::atomic<bool> isClipping { false };
 
     // Separate processing audio buffers
     juce::AudioBuffer<float> micBusBuffer;
+    juce::AudioBuffer<float> systemBusBuffer;
     juce::AudioBuffer<float> musicBusBuffer;
     juce::AudioBuffer<float> masterBusBuffer;
+    juce::AudioBuffer<float> virtualMicOutputBuffer;
     juce::MidiBuffer midiBuffer;
+    juce::MidiBuffer systemMidiBuffer;
 
-    // Lock-free waveform FIFO
+    // Lock-free waveform FIFOs
     std::array<float, WaveformBufferSize> micWaveformFifo{};
+    std::array<float, WaveformBufferSize> systemWaveformFifo{};
     std::array<float, WaveformBufferSize> outputWaveformFifo{};
     std::atomic<int> micFifoWritePos { 0 };
+    std::atomic<int> systemFifoWritePos { 0 };
     std::atomic<int> outFifoWritePos { 0 };
 
+    juce::String savedDefaultDeviceName;
     juce::String lastDeviceError;
     double currentSampleRate = 44100.0;
     int currentBlockSize = 512;
+    int logCounter = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };
