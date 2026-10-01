@@ -21,8 +21,14 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Check Folder Structure & Install Dependencies
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "package.json") -and (Test-Path "HNStudio-Musik-AI/package.json")) {
+            Write-Host "Syncing from HNStudio-Musik-AI subfolder to root..."
+            Copy-Item -Path "HNStudio-Musik-AI/*" -Destination "." -Recurse -Force
+          }
+          npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: Build Web Application
         run: npm run build
