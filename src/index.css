@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/* LIGHT SWEEP ANIMATIONS FOR HNSTUDIO MUSIK AI */
+@keyframes light-sweep {
+  0% {
+    transform: translateX(-180%) skewX(-25deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  40% {
+    transform: translateX(260%) skewX(-25deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(260%) skewX(-25deg);
+    opacity: 0;
+  }
+}
+
+@keyframes light-sweep-subtle {
+  0% {
+    transform: translateX(-200%) skewX(-20deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateX(300%) skewX(-20deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(300%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+@keyframes text-light-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  50%, 100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes spark-glint {
+  0%, 35%, 100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  42% {
+    opacity: 1;
+    transform: scale(1.15) rotate(45deg);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(0.4) rotate(90deg);
+  }
+}
+
+.animate-light-sweep {
+  animation: light-sweep 3.2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+.animate-light-sweep-subtle {
+  animation: light-sweep-subtle 4s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+.animate-text-light-sweep {
+  background-size: 250% 100%;
+  animation: text-light-sweep 4s ease-in-out infinite;
+}
+
+.animate-spark-glint {
+  animation: spark-glint 3.2s ease-in-out infinite;
+}
